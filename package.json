@@ -4,9 +4,7 @@
   "description": "Backend for Restaurant App",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "echo 'No build step required'"
+    "start": "node server.js"
   },
   "dependencies": {
     "cloudinary": "^2.7.0",
@@ -20,8 +18,5 @@
     "pdf-parse": "^1.1.1",
     "pg": "^8.16.3",
     "serverless-http": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=18.x"
   }
 }
