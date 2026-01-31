@@ -8,7 +8,7 @@ require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // False for dev; use CA cert for prod
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Function to check if tables exist
@@ -27,7 +27,7 @@ const initTables = async () => {
     console.log('Resumes table exists and is accessible.');
   } catch (err) {
     console.error('Error checking tables:', err.message);
-    console.log('Ensure tables (users, messages, resumes) are created in CockroachDB.');
+    console.log('Ensure tables (users, messages, resumes) are created in PostgreSQL.');
   }
 };
 

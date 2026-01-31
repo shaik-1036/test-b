@@ -24,7 +24,7 @@ router.post('/signup', async (req, res) => {
     passoutyear: req.body.passoutYear
   };
   try {
-    console.log('Attempting to insert user data into CockroachDB:', userData);
+    console.log('Attempting to insert user data into PostgreSQL:', userData);
     const query = `
       INSERT INTO users (email, fullname, password, dob, city, state, country, phone, status, qualification, branch, passoutyear)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -39,7 +39,7 @@ router.post('/signup', async (req, res) => {
     console.log('User inserted successfully:', result.rows[0]);
     res.status(201).json({ success: true, message: 'User registered successfully' });
   } catch (err) {
-    console.error('CockroachDB insert error:', err);
+    console.error('PostgreSQL insert error:', err);
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'Email already exists' });
     }
@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
     };
     res.status(200).json({ success: true, user });
   } catch (err) {
-    console.error('CockroachDB login error:', err);
+    console.error('PostgreSQL login error:', err);
     return res.status(500).json({ success: false, message: 'Login failed', error: err.message });
   }
 });
@@ -80,7 +80,7 @@ router.post('/forgot-password', async (req, res) => {
     }
     res.status(200).json({ success: true, message: 'Password updated successfully' });
   } catch (err) {
-    console.error('CockroachDB update error:', err);
+    console.error('PostgreSQL update error:', err);
     return res.status(500).json({ success: false, message: 'Error updating password', error: err.message });
   }
 });
