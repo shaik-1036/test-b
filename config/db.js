@@ -6,9 +6,21 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+console.log('[v0] DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('[v0] NODE_ENV:', process.env.NODE_ENV);
+console.log('[v0] SSL enabled:', process.env.NODE_ENV === 'production');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+pool.on('error', (err) => {
+  console.error('[v0] Unexpected pool error:', err);
+});
+
+pool.on('connect', () => {
+  console.log('[v0] Successfully connected to PostgreSQL');
 });
 
 // Function to check if tables exist
