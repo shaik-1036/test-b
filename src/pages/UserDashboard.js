@@ -1,335 +1,634 @@
-/*
- * Copyright (c) 2025-2026 Your Company Name
- * All rights reserved.
- */
-// src/pages/UserDashboard.js
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { MessageSquare, Upload, AlertCircle, Trash2 } from 'lucide-react';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-
+import {
+  Menu, X, LogOut, Home, MessageSquare, Bell, Search, Send, Plus, 
+  Upload, File, User, Settings, MoreVertical, Clock, Zap
+} from 'lucide-react';
 import '../styles/user-dashboard.css';
 
 function UserDashboard() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const user = location.state?.user || {};
-  const [messages, setMessages] = useState([]);
-  const [unreadMessages, setUnreadMessages] = useState(0);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [resumeFile, setResumeFile] = useState(null);
-  const [resumeData, setResumeData] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [notifiedMessages, setNotifiedMessages] = useState(new Set());
-  const profileRef = useRef(null);
 
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [currentNavTab, setCurrentNavTab] = useState('home');
+
+  // User data
+  const [user, setUser] = useState(null);
+  const [profileImage, setProfileImage] = useState(null);
+
+  // Home tab state
+  const [resumes, setResumes] = useState([]);
+
+  // Messages tab state
+  const [allUsers, setAllUsers] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [currentMessages, setCurrentMessages] = useState([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [searchUsers, setSearchUsers] = useState('');
+  const [showSearchPopup, setShowSearchPopup] = useState(false);
+  const [conversationCount, setConversationCount] = useState(0);
+
+  // Notifications tab state
+  const [adminMessages, setAdminMessages] = useState([]);
+
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [messageLoading, setMessageLoading] = useState(false);
+
+  const messagesEndRef = useRef(null);
+
+  // Initialize
   useEffect(() => {
-    fetchMessages();
-    fetchResumeData();
-    const interval = setInterval(() => {
-      fetchMessages();
-    }, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
-  }, [user]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setIsProfileOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const fetchMessages = async () => {
-    try {
-      const res = await axios.get('http://localhost:5000/api/messages', {
-        params: { category: user.status }
-      });
-      const newMessages = res.data;
-      setMessages(newMessages);
-      
-      // Only show notification for messages we haven't notified about yet
-      const newNotifications = [];
-      newMessages.forEach((msg) => {
-        const msgKey = `${msg.id || msg.message}-${msg.timestamp}`;
-        if (!notifiedMessages.has(msgKey)) {
-          newNotifications.push(msgKey);
-        }
-      });
-      
-      if (newNotifications.length > 0) {
-        setUnreadMessages(prev => prev + newNotifications.length);
-        toast.info(`You have ${newNotifications.length} new message(s)!`);
-        setNotifiedMessages(prev => new Set([...prev, ...newNotifications]));
-      }
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-    }
-  };
-
-  const fetchResumeData = async () => {
-    try {
-      const res = await axios.get(`http://localhost:5000/api/user-resume?email=${user.email}`);
-      if (res.data.success && res.data.resumeData) {
-        setResumeData(res.data.resumeData);
-      } else {
-        setResumeData(null);
-      }
-    } catch (err) {
-      console.error('Error fetching resume data:', err);
-      setResumeData(null);
-    }
-  };
-
-  const handleWhatsAppRedirect = () => {
-    window.open('https://wa.me/1234567890', '_blank');
-  };
-
-  const handleNotificationClick = () => {
-    setUnreadMessages(0);
-    const messagesSection = document.querySelector('.messages-section');
-    if (messagesSection) {
-      messagesSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  const toggleProfile = () => {
-    setIsProfileOpen(!isProfileOpen);
-  };
-
-  const handleUpdatePassword = async () => {
-    if (!newPassword) {
-      alert('Please enter a new password');
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      navigate('/login');
       return;
     }
+
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
+    setLoading(false);
+
+    // Fetch additional data
+    fetchUserData(parsedUser);
+    fetchResumes(parsedUser.email);
+    fetchConversations(parsedUser.id);
+    fetchNotifications(parsedUser.id);
+
+    // Set up polling for real-time messages
+    const messagePolling = setInterval(() => {
+      if (selectedUser) {
+        pollMessages(parsedUser.id, selectedUser.id);
+      }
+    }, 3000);
+
+    return () => clearInterval(messagePolling);
+  }, [navigate]);
+
+  // Fetch user data
+  const fetchUserData = async (userData) => {
     try {
-      const res = await axios.post('http://localhost:5000/api/forgot-password', { email: user.email, newPassword });
+      const res = await axios.get(`http://localhost:5000/api/user/${userData.email}`);
       if (res.data.success) {
-        alert('Password updated successfully!');
-        setIsUpdatingPassword(false);
-        setNewPassword('');
-      } else {
-        alert('Error updating password');
+        setUser(res.data.user);
+        setProfileImage(res.data.user.profile_image_url);
       }
     } catch (err) {
-      console.error('Error updating password:', err);
-      alert('Error updating password');
+      console.error('[v0] Error fetching user data:', err);
     }
   };
 
-  const handleLogout = () => {
-    navigate('/');
+  // Fetch resumes
+  const fetchResumes = async (email) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/resumes/${email}`);
+      if (res.data.success) {
+        setResumes(res.data.resumes);
+      }
+    } catch (err) {
+      console.error('[v0] Error fetching resumes:', err);
+    }
   };
 
+  // Fetch all users for search
+  useEffect(() => {
+    if (showSearchPopup && user) {
+      fetchAllUsers();
+    }
+  }, [showSearchPopup, user]);
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/users');
+      if (Array.isArray(res.data)) {
+        setAllUsers(res.data.filter(u => u.email !== user?.email));
+      }
+    } catch (err) {
+      console.error('[v0] Error fetching users:', err);
+    }
+  };
+
+  // Fetch conversations
+  const fetchConversations = async (userId) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/conversations/${userId}`);
+      if (res.data.success) {
+        setConversations(res.data.conversations);
+        setConversationCount(res.data.conversations.length);
+      }
+    } catch (err) {
+      console.error('[v0] Error fetching conversations:', err);
+    }
+  };
+
+  // Fetch messages for selected user
+  const fetchMessages = async (senderId, receiverId) => {
+    setMessageLoading(true);
+    try {
+      const res = await axios.get(`http://localhost:5000/api/messages/${senderId}/${receiverId}`);
+      if (res.data.success) {
+        setCurrentMessages(res.data.messages);
+        scrollToBottom();
+      }
+    } catch (err) {
+      console.error('[v0] Error fetching messages:', err);
+    } finally {
+      setMessageLoading(false);
+    }
+  };
+
+  // Poll for new messages
+  const pollMessages = async (senderId, receiverId) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/messages/${senderId}/${receiverId}`);
+      if (res.data.success) {
+        setCurrentMessages(res.data.messages);
+      }
+    } catch (err) {
+      console.error('[v0] Error polling messages:', err);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async (userId) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/notifications/${userId}`);
+      if (res.data.success) {
+        setAdminMessages(res.data.notifications);
+      }
+    } catch (err) {
+      console.error('[v0] Error fetching notifications:', err);
+    }
+  };
+
+  // Send message
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!messageInput.trim() || !selectedUser) return;
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/send-message', {
+        sender_id: user.id,
+        receiver_id: selectedUser.id,
+        message: messageInput,
+      });
+
+      if (res.data.success) {
+        setMessageInput('');
+        await fetchMessages(user.id, selectedUser.id);
+        await fetchConversations(user.id);
+      }
+    } catch (err) {
+      console.error('[v0] Error sending message:', err);
+    }
+  };
+
+  // Handle user selection for messaging
+  const handleSelectUser = (selectedUserData) => {
+    setSelectedUser(selectedUserData);
+    setShowSearchPopup(false);
+    fetchMessages(user.id, selectedUserData.id);
+
+    const exists = conversations.find(c => c.conversation_partner_id === selectedUserData.id);
+    if (!exists && conversationCount < 5) {
+      // Can start new conversation
+    } else if (!exists && conversationCount >= 5) {
+      alert('You can only have 5 active conversations. Upgrade to premium for more.');
+    }
+  };
+
+  // Upload resume
   const handleResumeUpload = async (e) => {
-    e.preventDefault();
-    if (!resumeFile) {
-      alert('Please select a file to upload');
-      return;
-    }
-    setIsUploading(true);
+    const file = e.target.files[0];
+    if (!file) return;
+
     const formData = new FormData();
-    formData.append('resume', resumeFile);
+    formData.append('resume', file);
     formData.append('email', user.email);
-    formData.append('name', user.fullName || 'Unknown');
 
     try {
       const res = await axios.post('http://localhost:5000/api/upload-resume', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
+
       if (res.data.success) {
-        setResumeData(res.data.resumeData);
+        fetchResumes(user.email);
         alert('Resume uploaded successfully!');
-        setResumeFile(null);
-      } else {
-        alert('Error uploading resume');
       }
     } catch (err) {
-      console.error('Error uploading resume:', err);
-      alert('Error uploading resume');
-    } finally {
-      setIsUploading(false);
+      console.error('[v0] Error uploading resume:', err);
+      alert('Failed to upload resume');
     }
   };
 
-  const handleDeleteResume = async () => {
-    try {
-      const res = await axios.delete('http://localhost:5000/api/delete-resume', {
-        data: { email: user.email }
-      });
-      if (res.data.success) {
-        setResumeData(null);
-        alert('Resume deleted successfully!');
-      } else {
-        alert('Error deleting resume');
-      }
-    } catch (err) {
-      console.error('Error deleting resume:', err);
-      alert('Error deleting resume');
-    }
+  // Logout
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    navigate('/login');
   };
 
-  const handleUpdateResume = async (e) => {
-    e.preventDefault();
-    if (!resumeFile) {
-      alert('Please select a file to update');
-      return;
-    }
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('resume', resumeFile);
-    formData.append('email', user.email);
-    formData.append('name', user.fullName || 'Unknown');
-
-    try {
-      const res = await axios.post('http://localhost:5000/api/upload-resume', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      if (res.data.success) {
-        setResumeData(res.data.resumeData);
-        alert('Resume updated successfully!');
-        setResumeFile(null);
-      } else {
-        alert('Error updating resume');
-      }
-    } catch (err) {
-      console.error('Error updating resume:', err);
-      alert('Error updating resume');
-    } finally {
-      setIsUploading(false);
-    }
+  // Scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Sort messages by timestamp descending (recent first)
-  const sortedMessages = [...messages].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  if (loading) {
+    return <div className="loading-container"><p>Loading...</p></div>;
+  }
 
   return (
-    <div className="user-dashboard">
-      <div className="dashboard-header">
-        <div className="profile-section" ref={profileRef}>
-          <div className="profile-icon" onClick={toggleProfile}>
-            {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
+    <motion.div
+      className="user-dashboard"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Sidebar */}
+      <motion.aside
+        className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}
+        initial={{ x: -300 }}
+        animate={{ x: sidebarOpen ? 0 : -300 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="sidebar-header">
+          <h2>Skill Connect</h2>
+          <button className="close-sidebar" onClick={() => setSidebarOpen(false)}>
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* User Profile Section */}
+        <div className="sidebar-profile">
+          <div className="profile-image-container">
+            <img
+              src={profileImage || 'https://via.placeholder.com/120?text=Profile'}
+              alt="Profile"
+              className="profile-image"
+            />
           </div>
-          {isProfileOpen && (
+          <h3>{user?.fullName || 'User'}</h3>
+          <p className="profile-company">{user?.company || 'Not specified'}</p>
+          <p className="profile-status">{user?.status}</p>
+
+          {/* Profile Dropdown */}
+          <div className="profile-dropdown">
+            <button
+              className="dropdown-toggle"
+              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            >
+              <MoreVertical size={20} />
+            </button>
+            {profileMenuOpen && (
+              <motion.div
+                className="dropdown-menu"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <button className="dropdown-item">
+                  <User size={18} /> View Profile
+                </button>
+                <button className="dropdown-item">
+                  <Settings size={18} /> Settings
+                </button>
+                <button className="dropdown-item logout-item" onClick={handleLogout}>
+                  <LogOut size={18} /> Logout
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="sidebar-nav">
+          <button
+            className={`nav-item ${currentNavTab === 'home' ? 'active' : ''}`}
+            onClick={() => setCurrentNavTab('home')}
+          >
+            <Home size={20} /> Home
+          </button>
+          <button
+            className={`nav-item ${currentNavTab === 'messages' ? 'active' : ''}`}
+            onClick={() => setCurrentNavTab('messages')}
+          >
+            <MessageSquare size={20} /> Messages
+            {conversationCount > 0 && <span className="badge">{conversationCount}/5</span>}
+          </button>
+          <button
+            className={`nav-item ${currentNavTab === 'notifications' ? 'active' : ''}`}
+            onClick={() => setCurrentNavTab('notifications')}
+          >
+            <Bell size={20} /> Notifications
+            {adminMessages.length > 0 && <span className="badge">{adminMessages.length}</span>}
+          </button>
+        </nav>
+      </motion.aside>
+
+      {/* Main Content */}
+      <main className="main-content">
+        {/* Top Navbar */}
+        <header className="top-navbar">
+          <button className="toggle-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <Menu size={24} />
+          </button>
+          <h1>Professional Network Dashboard</h1>
+          <div className="navbar-right">
+            {currentNavTab === 'messages' && (
+              <button
+                className="search-button"
+                onClick={() => setShowSearchPopup(!showSearchPopup)}
+              >
+                <Search size={20} /> Find People
+              </button>
+            )}
+            <button className="logout-btn" onClick={handleLogout}>
+              <LogOut size={20} />
+            </button>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="content-area">
+          {/* HOME TAB */}
+          {currentNavTab === 'home' && (
             <motion.div
-              className="profile-popup"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
+              className="tab-content home-tab"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <h3>{user.fullName || 'User'}</h3>
-              <p>Email: {user.email || 'N/A'}</p>
-              <p>City: {user.city || 'N/A'}</p>
-              <p>State: {user.state || 'N/A'}</p>
-              <p>Country: {user.country || 'N/A'}</p>
-              <p>Phone: {user.phone || 'N/A'}</p>
-              <p>Status: {user.status || 'N/A'}</p>
-              <p>Qualification: {user.qualification || 'N/A'}</p>
-              <p>Branch: {user.branch || 'N/A'}</p>
-              <p>Passout Year: {user.passoutYear || 'N/A'}</p>
-              {!isUpdatingPassword ? (
-                <button onClick={() => setIsUpdatingPassword(true)}>Update Password</button>
-              ) : (
-                <div>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New Password"
-                    style={{ width: '100%', padding: '0.5rem', margin: '0.5rem 0' }}
-                  />
-                  <button onClick={handleUpdatePassword}>Save</button>
-                  <button onClick={() => setIsUpdatingPassword(false)}>Cancel</button>
+              <div className="welcome-section">
+                <h2>Welcome to Professional Networking</h2>
+                <p>Connect with people, share skills, and grow your network</p>
+              </div>
+
+              {/* User Details */}
+              <div className="user-details-section">
+                <h3>Your Profile</h3>
+                <div className="details-grid">
+                  <div className="detail-item">
+                    <span className="label">Name:</span>
+                    <span className="value">{user?.fullName}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Company:</span>
+                    <span className="value">{user?.company || 'Not specified'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Email:</span>
+                    <span className="value">{user?.email}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Phone:</span>
+                    <span className="value">{user?.phone || 'Not specified'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Status:</span>
+                    <span className="value">{user?.status}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Qualification:</span>
+                    <span className="value">{user?.qualification}</span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Resumes Section */}
+              <div className="resumes-section">
+                <div className="resumes-header">
+                  <h3>Your Resumes</h3>
+                  <label className="upload-button">
+                    <Upload size={20} /> Upload Resume
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleResumeUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+
+                {resumes.length > 0 ? (
+                  <div className="resumes-list">
+                    {resumes.map((resume) => (
+                      <motion.div
+                        key={resume.id}
+                        className="resume-item"
+                        whileHover={{ y: -5 }}
+                      >
+                        <File size={32} className="file-icon" />
+                        <div className="resume-info">
+                          <h4>{resume.name}</h4>
+                          <p>{resume.file_type}</p>
+                        </div>
+                        <a href={resume.resume_url} target="_blank" rel="noopener noreferrer" className="download-link">
+                          Download
+                        </a>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-message">No resumes uploaded yet. Upload your first resume to get started!</p>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* MESSAGES TAB */}
+          {currentNavTab === 'messages' && (
+            <motion.div
+              className="tab-content messages-tab"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="messages-container">
+                {/* Search Popup */}
+                {showSearchPopup && (
+                  <motion.div
+                    className="search-popup"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <div className="search-popup-header">
+                      <h4>Find People to Connect</h4>
+                      <button onClick={() => setShowSearchPopup(false)}>
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Search by name or company..."
+                      value={searchUsers}
+                      onChange={(e) => setSearchUsers(e.target.value)}
+                      className="search-input"
+                    />
+
+                    <div className="search-results">
+                      {allUsers
+                        .filter(
+                          (u) =>
+                            u.fullname.toLowerCase().includes(searchUsers.toLowerCase()) ||
+                            (u.company && u.company.toLowerCase().includes(searchUsers.toLowerCase()))
+                        )
+                        .slice(0, 10)
+                        .map((u) => (
+                          <motion.div
+                            key={u.id}
+                            className="search-result-item"
+                            whileHover={{ scale: 1.02 }}
+                            onClick={() => handleSelectUser(u)}
+                          >
+                            <img
+                              src={u.profile_image_url || 'https://via.placeholder.com/40?text=User'}
+                              alt={u.fullname}
+                              className="result-avatar"
+                            />
+                            <div className="result-info">
+                              <h5>{u.fullname}</h5>
+                              <p>{u.company || u.status}</p>
+                            </div>
+                            <Plus size={18} />
+                          </motion.div>
+                        ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Conversations List */}
+                <div className="conversations-list">
+                  <h3>Your Conversations ({conversationCount}/5)</h3>
+                  {conversations.length > 0 ? (
+                    <div className="conversations">
+                      {conversations.map((conv) => (
+                        <motion.div
+                          key={conv.id}
+                          className={`conversation-item ${selectedUser?.id === conv.conversation_partner_id ? 'active' : ''}`}
+                          whileHover={{ x: 5 }}
+                          onClick={() => handleSelectUser(conv.conversation_partner)}
+                        >
+                          <img
+                            src={conv.conversation_partner?.profile_image_url || 'https://via.placeholder.com/40?text=User'}
+                            alt={conv.conversation_partner?.fullname}
+                            className="conv-avatar"
+                          />
+                          <div className="conv-info">
+                            <h5>{conv.conversation_partner?.fullname}</h5>
+                            <p>{conv.last_message || 'No messages yet'}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-message">No conversations yet. Search for people to connect!</p>
+                  )}
+                </div>
+
+                {/* Chat Area */}
+                {selectedUser ? (
+                  <div className="chat-area">
+                    <div className="chat-header">
+                      <img
+                        src={selectedUser.profile_image_url || 'https://via.placeholder.com/40?text=User'}
+                        alt={selectedUser.fullname}
+                        className="chat-avatar"
+                      />
+                      <div className="chat-user-info">
+                        <h4>{selectedUser.fullname}</h4>
+                        <p>{selectedUser.company || selectedUser.status}</p>
+                      </div>
+                    </div>
+
+                    <div className="messages-list">
+                      {messageLoading ? (
+                        <p className="loading">Loading messages...</p>
+                      ) : currentMessages.length > 0 ? (
+                        currentMessages.map((msg) => (
+                          <motion.div
+                            key={msg.id}
+                            className={`message ${msg.sender_id === user.id ? 'sent' : 'received'}`}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                          >
+                            <p>{msg.message}</p>
+                            <span className="message-time">
+                              <Clock size={12} /> {new Date(msg.created_at).toLocaleTimeString()}
+                            </span>
+                          </motion.div>
+                        ))
+                      ) : (
+                        <p className="empty-message">No messages yet. Say hello!</p>
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    <form className="message-input-form" onSubmit={handleSendMessage}>
+                      <input
+                        type="text"
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        placeholder="Type your message..."
+                        className="message-input"
+                      />
+                      <button type="submit" className="send-button">
+                        <Send size={20} />
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="no-chat-selected">
+                    <MessageSquare size={48} />
+                    <p>Select a conversation or search for someone to chat</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* NOTIFICATIONS TAB */}
+          {currentNavTab === 'notifications' && (
+            <motion.div
+              className="tab-content notifications-tab"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <h3>Notifications from Admin</h3>
+              {adminMessages.length > 0 ? (
+                <div className="notifications-list">
+                  {adminMessages.map((notif) => (
+                    <motion.div
+                      key={notif.id}
+                      className="notification-item"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                    >
+                      <div className="notif-icon">
+                        <Zap size={24} />
+                      </div>
+                      <div className="notif-content">
+                        <h4>{notif.title}</h4>
+                        <p>{notif.message}</p>
+                        <span className="notif-time">
+                          {new Date(notif.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-message">No notifications yet</p>
               )}
-              <button className="logout-btn" onClick={handleLogout}>Logout</button>
             </motion.div>
           )}
         </div>
-        <div className="action-buttons">
-          <button className="whatsapp-btn" onClick={handleWhatsAppRedirect}>
-            <MessageSquare size={20} />
-          </button>
-          <button className="notification-btn" onClick={handleNotificationClick} data-count={unreadMessages}>
-            <AlertCircle size={20} />
-          </button>
-        </div>
-      </div>
-      <h2>Welcome to Restaurant App</h2>
-      <div className="dashboard-content">
-        <div className="messages-section">
-          <h3>Messages from Admin</h3>
-          {sortedMessages.length > 0 ? (
-            sortedMessages.map((msg, index) => (
-              <motion.div
-                key={index}
-                className="message"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
-                <p style={{ whiteSpace: 'pre-line', textAlign: 'left' }}>{msg.message}</p>
-                <p><small style={{ color: '#e74c3c', textAlign: 'left', display: 'block' }}>Sent on: {new Date(msg.timestamp).toLocaleString()}</small></p>
-                <p><small style={{ color: '#7f8c8d', textAlign: 'left', display: 'block' }}>Note: This message will be deleted after 2 days.</small></p>
-              </motion.div>
-            ))
-          ) : (
-            <p>No messages yet.</p>
-          )}
-        </div>
-        <div className="resume-section">
-          <h3>Upload Your Resume/Doc</h3>
-          <form onSubmit={resumeData ? handleUpdateResume : handleResumeUpload} className="upload-form">
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={(e) => setResumeFile(e.target.files[0])}
-              className="file-input"
-            />
-            <motion.button
-              type="submit"
-              disabled={isUploading}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              {isUploading ? 'Uploading...' : resumeData ? 'Update Resume' : 'Upload Resume'}
-              {!isUploading && <Upload size={16} style={{ marginLeft: '0.5rem' }} />}
-            </motion.button>
-          </form>
-          {resumeData && (
-            <>
-              <div className="resume-display">
-                <h4>Your Uploaded Resume/Doc Content</h4>
-                <p style={{ whiteSpace: 'pre-line', textAlign: 'left' }}>{resumeData}</p>
-              </div>
-              <motion.button
-                className="delete-resume-btn"
-                onClick={handleDeleteResume}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                style={{ marginTop: '1rem' }}
-              >
-                Delete Resume
-                <Trash2 size={16} style={{ marginLeft: '0.5rem' }} />
-              </motion.button>
-            </>
-          )}
-        </div>
-      </div>
-      <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} />
-      
-    </div>
+      </main>
+    </motion.div>
   );
 }
 
