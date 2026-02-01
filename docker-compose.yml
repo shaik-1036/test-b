@@ -61,8 +61,8 @@ services:
   # -------- NODE BACKEND --------
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: ../Dockerfile
     container_name: skill_connect_backend
     restart: unless-stopped
     depends_on:
@@ -86,7 +86,7 @@ services:
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minioadmin123}
-      MINIO_BUCKET: ${MINIO_BUCKET:-skill-connect}
+      MINIO_BUCKET: ${MINIO_BUCKET:-skill-connect-bucket}
       
       # Email Configuration - Mailpit (Local Testing)
       MAILPIT_HOST: mailpit
@@ -103,6 +103,10 @@ services:
       # Email Configuration - Mailpilt (Fallback)
       MAILPILT_API_KEY: ${MAILPILT_API_KEY:- }
       MAILPILT_DOMAIN: ${MAILPILT_DOMAIN:- }
+      
+      # Admin Configuration
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@skillconnect.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -112,8 +116,8 @@ services:
   # -------- FRONTEND --------
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
     container_name: skill_connect_frontend
     restart: unless-stopped
     depends_on:
@@ -121,10 +125,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000}
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://backend:5000}
       REACT_APP_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-development}
     volumes:
-      - ./src:/app/src
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     networks:
       - skill_connect_network
 
