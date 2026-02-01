@@ -29,15 +29,19 @@ function Login() {
     }
 
     try {
-      const res = await axios.post('http://localhost:5000/api/login', formData);
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      console.log('[v0] Logging in with API:', apiUrl);
+      const res = await axios.post(`${apiUrl}/api/login`, formData);
       if (res.data.success) {
         localStorage.setItem('user', JSON.stringify(res.data.user));
+        localStorage.setItem('token', res.data.token || '');
         navigate('/user-dashboard', { state: { user: res.data.user } });
       } else {
         setError(res.data.message || 'Login failed');
       }
     } catch (err) {
       console.error('[v0] Login error:', err);
+      console.error('[v0] Error response:', err.response?.data);
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);

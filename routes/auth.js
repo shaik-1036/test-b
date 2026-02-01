@@ -42,15 +42,15 @@ router.post('/signup', async (req, res) => {
     fullname: fullName,
     password: password, // TODO: Hash password with bcrypt before saving
     company: company || null,
-    dob,
-    city,
-    state,
-    country,
-    phone,
+    dob: dob || null,
+    city: city || null,
+    state: state || null,
+    country: country || null,
+    phone: phone || null,
     status,
-    qualification,
-    branch,
-    passoutyear: passoutYear
+    qualification: qualification || null,
+    branch: branch || null,
+    passoutyear: passoutYear || null
   };
 
   try {
@@ -58,13 +58,20 @@ router.post('/signup', async (req, res) => {
     const query = `
       INSERT INTO users (email, fullname, password, company, dob, city, state, country, phone, status, qualification, branch, passoutyear)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING id, email, fullname, company, status
+      RETURNING id, email, fullname, company, status, created_at
     `;
     const values = [
       userData.email, userData.fullname, userData.password, userData.company, userData.dob,
       userData.city, userData.state, userData.country, userData.phone, userData.status,
       userData.qualification, userData.branch, userData.passoutyear
     ];
+    
+    console.log('[v0] Executing query with values:', {
+      email: values[0],
+      fullname: values[1],
+      status: values[9],
+      columns: 'email, fullname, password, company, dob, city, state, country, phone, status, qualification, branch, passoutyear'
+    });
     
     const result = await pool.query(query, values);
     const newUser = result.rows[0];
@@ -78,6 +85,11 @@ router.post('/signup', async (req, res) => {
     });
   } catch (err) {
     console.error('[v0] PostgreSQL signup error:', err);
+    console.error('[v0] Error details:', {
+      code: err.code,
+      message: err.message,
+      detail: err.detail
+    });
     
     if (err.code === '23505') {
       return res.status(409).json({ 
@@ -89,7 +101,8 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ 
       success: false, 
       message: 'Signup failed', 
-      error: err.message 
+      error: err.message,
+      detail: err.detail
     });
   }
 });

@@ -66,15 +66,20 @@ function Signup() {
     setError('');
 
     try {
-      const res = await axios.post('http://localhost:5000/api/signup', formData);
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      console.log('[v0] Signing up with API:', apiUrl);
+      const res = await axios.post(`${apiUrl}/api/signup`, formData);
+      
       if (res.data.success) {
+        localStorage.setItem('user', JSON.stringify(res.data.user));
         navigate('/login', { state: { success: 'Signup successful! Please login.' } });
       } else {
         setError(res.data.message || 'Signup failed');
       }
     } catch (err) {
       console.error('[v0] Signup error:', err);
-      setError(err.response?.data?.message || 'Signup failed. Please try again.');
+      console.error('[v0] Error response:', err.response?.data);
+      setError(err.response?.data?.message || err.response?.data?.detail || 'Signup failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
