@@ -10,7 +10,8 @@ const path = require("path")
 const authRoutes = require("./routes/auth")
 const userRoutes = require("./routes/users")
 const messageRoutes = require("./routes/messages")
-const uploadRoutes = require("./routes/admin") // Changed from admin to upload
+const uploadRoutes = require("./routes/admin")
+const donationRoutes = require("./routes/donations")
 require("dotenv").config()
 
 const app = express()
@@ -50,6 +51,7 @@ app.use("/api", authRoutes)
 app.use("/api", userRoutes)
 app.use("/api", messageRoutes)
 app.use("/api", uploadRoutes)
+app.use("/api", donationRoutes)
 
 // Basic Health Check
 app.get('/health', (req, res) => {
