@@ -10,10 +10,26 @@ console.log('[v0] DATABASE_URL exists:', !!process.env.DATABASE_URL);
 console.log('[v0] NODE_ENV:', process.env.NODE_ENV);
 console.log('[v0] SSL enabled:', process.env.NODE_ENV === 'production');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+// Connection configuration
+const dbConfig = process.env.DATABASE_URL 
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      user: process.env.DB_USER || 'admin',
+      password: process.env.DB_PASSWORD || 'admin123',
+      host: process.env.DB_HOST || 'postgres',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'skill_connect_db'
+    };
+
+dbConfig.ssl = process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
+
+console.log('[v0] Database config:', {
+  host: dbConfig.host || 'from-connection-string',
+  database: dbConfig.database,
+  user: dbConfig.user || 'from-connection-string'
 });
+
+const pool = new Pool(dbConfig);
 
 pool.on('error', (err) => {
   console.error('[v0] Unexpected pool error:', err);
@@ -212,6 +228,65 @@ const initTables = async () => {
       )
     `);
     console.log('[v0] Email statistics table created/verified');
+
+    // Create subscription plans table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscription_plans (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name TEXT NOT NULL,
+        description TEXT,
+        price DECIMAL(10, 2) NOT NULL,
+        duration_months INT NOT NULL,
+        max_conversations INT DEFAULT 999,
+        max_resumes INT DEFAULT 10,
+        priority_support BOOLEAN DEFAULT FALSE,
+        features TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(name, duration_months)
+      )
+    `);
+    console.log('[v0] Subscription plans table created/verified');
+
+    // Create user subscriptions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_subscriptions (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        plan_id UUID NOT NULL REFERENCES subscription_plans(id),
+        status TEXT DEFAULT 'pending',
+        payment_screenshot_url TEXT,
+        transaction_proof TEXT,
+        start_date TIMESTAMP,
+        end_date TIMESTAMP,
+        is_approved BOOLEAN DEFAULT FALSE,
+        approved_by UUID REFERENCES users(id),
+        approved_at TIMESTAMP,
+        rejection_reason TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[v0] User subscriptions table created/verified');
+
+    // Create payment records table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_records (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        subscription_id UUID REFERENCES user_subscriptions(id),
+        amount DECIMAL(10, 2) NOT NULL,
+        currency TEXT DEFAULT 'USD',
+        payment_method TEXT,
+        transaction_id TEXT UNIQUE,
+        status TEXT DEFAULT 'pending',
+        screenshot_url TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+      )
+    `);
+    console.log('[v0] Payment records table created/verified');
 
     // Create indexes
     await pool.query('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');

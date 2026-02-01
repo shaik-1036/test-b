@@ -12,6 +12,7 @@ const userRoutes = require("./routes/users")
 const messageRoutes = require("./routes/messages")
 const uploadRoutes = require("./routes/admin")
 const donationRoutes = require("./routes/donations")
+const subscriptionRoutes = require("./routes/subscriptions")
 require("dotenv").config()
 
 const app = express()
@@ -52,6 +53,7 @@ app.use("/api", userRoutes)
 app.use("/api", messageRoutes)
 app.use("/api", uploadRoutes)
 app.use("/api", donationRoutes)
+app.use("/api/subscriptions", subscriptionRoutes)
 
 // Basic Health Check
 app.get('/health', (req, res) => {
